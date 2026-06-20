@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+
 export type Business = {
   name: string;
   type: string;
@@ -17,10 +18,6 @@ export type Review = {
   starRating: number;
   comment?: string;
 };
-
-// ── Client ────────────────────────────────────────────────────────────────────
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── generateReply ─────────────────────────────────────────────────────────────
 
@@ -55,6 +52,8 @@ Star rating: ${review.starRating}/5
 Review text: "${review.comment || "(No written review — stars only)"}"
 
 Write the reply now:`;
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const message = await client.messages.create({
     model: "claude-haiku-4-5",

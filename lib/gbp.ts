@@ -87,7 +87,7 @@ async function fetchWithRetry(
 export async function fetchAccounts(
   accessToken: string
 ): Promise<{ accounts: GBPAccount[] }> {
-  const url = "https://mybusiness.googleapis.com/v4/accounts";
+  const url = "https://mybusinessaccountmanagement.googleapis.com/v1/accounts";
   const headers = { Authorization: `Bearer ${accessToken}` };
 
   const res = await fetchWithRetry(url, { headers }, accessToken);
@@ -104,7 +104,7 @@ export async function fetchLocations(
   accessToken: string,
   accountName: string
 ): Promise<{ locations: GBPLocation[] }> {
-  const url = `https://mybusiness.googleapis.com/v4/${accountName}/locations`;
+  const url = `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name,title,storefrontAddress`;
   const headers = { Authorization: `Bearer ${accessToken}` };
 
   const res = await fetchWithRetry(url, { headers }, accessToken);
@@ -122,6 +122,7 @@ export async function fetchReviews(
   locationName: string
 ): Promise<{ reviews: GBPReview[] }> {
   const url = `https://mybusiness.googleapis.com/v4/${locationName}/reviews?orderBy=updateTime+desc&pageSize=50`;
+  // Note: reviews API remains on v4 mybusiness.googleapis.com
   const headers = { Authorization: `Bearer ${accessToken}` };
 
   const res = await fetchWithRetry(url, { headers }, accessToken);
