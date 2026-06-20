@@ -12,36 +12,22 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 import { generateReply, type Business } from "../lib/claude";
 import { createServiceClient } from "../lib/supabase";
+import { sendReviewAlert } from "../lib/email";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const TEST_BUSINESS_ID = "9c69f05e-d418-4b07-b783-a01c664bfeb6";
+const TEST_BUSINESS_ID: string = "51ff9432-f66b-4825-adeb-432d565f19ff";
 
 // ── Mock reviews ──────────────────────────────────────────────────────────────
 
 const MOCK_REVIEWS = [
   {
-    reviewId: "mock-review-001",
-    reviewer: { displayName: "Priya Sharma" },
-    starRating: "FIVE" as const,
+    reviewId: "mock-review-004",
+    reviewer: { displayName: "Sneha Patel" },
+    starRating: "FOUR" as const,
     comment:
-      "Absolutely loved the butter chicken here! The ambiance was cozy and the staff was super friendly. Will definitely come back with family.",
-    updateTime: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    reviewId: "mock-review-002",
-    reviewer: { displayName: "Rahul Mehta" },
-    starRating: "THREE" as const,
-    comment:
-      "Food was decent but the wait time was too long. Waited almost 40 minutes for our order. The paneer tikka was good though.",
-    updateTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    reviewId: "mock-review-003",
-    reviewer: { displayName: "Anon" },
-    starRating: "ONE" as const,
-    comment: undefined,
-    updateTime: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      "Great food and lovely ambiance! The dal makhani was outstanding. Service was a bit slow during peak hours but overall a wonderful experience.",
+    updateTime: new Date().toISOString(),
   },
 ];
 
@@ -85,6 +71,10 @@ async function main() {
 
   console.log("\n── AI Replies + Supabase Upsert ──────────────");
 
+  let firstReviewSupabaseId: string | null = null;
+  let firstReviewDraft: string | null = null;
+  let isFirst = true;
+
   for (const review of MOCK_REVIEWS) {
     const starRating = STAR_RATING_MAP[review.starRating];
 
@@ -103,25 +93,50 @@ async function main() {
       console.log(`  → ${reply}`);
     }
 
-    const { error } = await supabase.from("reviews").upsert(
-      {
-        business_id: TEST_BUSINESS_ID,
-        google_review_id: review.reviewId,
-        reviewer_name: review.reviewer.displayName,
-        star_rating: starRating,
-        comment: review.comment ?? null,
-        review_time: review.updateTime,
-        status,
-        ai_draft: reply ?? null,
-      },
-      { onConflict: "google_review_id" }
-    );
+    const { data, error } = await supabase
+      .from("reviews")
+      .upsert(
+        {
+          business_id: TEST_BUSINESS_ID,
+          google_review_id: review.reviewId,
+          reviewer_name: review.reviewer.displayName,
+          star_rating: starRating,
+          comment: review.comment ?? null,
+          review_time: review.updateTime,
+          status,
+          ai_draft: reply ?? null,
+        },
+        { onConflict: "google_review_id" }
+      )
+      .select("id")
+      .single();
 
     if (error) {
       console.error(`  ❌ Supabase error: ${error.message}`);
     } else {
       console.log(`  ✓ Saved to Supabase: ${review.reviewId} — status: ${status}`);
+      if (isFirst && data) {
+        firstReviewSupabaseId = data.id;
+        firstReviewDraft = reply;
+      }
     }
+
+    isFirst = false;
+  }
+
+  // Send email for first review only
+  if (firstReviewSupabaseId && firstReviewDraft && process.env.TEST_EMAIL) {
+    const first = MOCK_REVIEWS[0];
+    await sendReviewAlert({
+      to: process.env.TEST_EMAIL,
+      businessName: TEST_BUSINESS.name,
+      reviewerName: first.reviewer.displayName,
+      starRating: STAR_RATING_MAP[first.starRating],
+      reviewText: first.comment || "",
+      draftReply: firstReviewDraft,
+      reviewId: firstReviewSupabaseId,
+    });
+    console.log(`\n  ✓ Email sent to ${process.env.TEST_EMAIL}`);
   }
 
   // Hindi reply test (log only, no extra DB insert)
