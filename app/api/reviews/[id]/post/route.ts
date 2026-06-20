@@ -1,50 +1,103 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { postReply } from "@/lib/gbp";
+import { refreshAccessToken } from "@/lib/google-auth";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const { replyText } = await req.json();
-
-  if (!replyText?.trim()) {
-    return NextResponse.json({ error: "Reply text is required" }, { status: 400 });
-  }
-
-  const supabase = await createServerSupabaseClient();
-
-  const { data: review, error } = await supabase
-    .from("reviews")
-    .select("*, businesses(*)")
-    .eq("id", id)
-    .single();
-
-  if (error || !review) {
-    return NextResponse.json({ error: "Review not found" }, { status: 404 });
-  }
-
-  const business = review.businesses;
-
   try {
-    if (business?.gbp_access_token && business?.gbp_location_name) {
-      const reviewName = `${business.gbp_location_name}/reviews/${review.google_review_id}`;
-      await postReply(business.gbp_access_token, reviewName, replyText);
+    const { id } = await params;
+    const body = await req.json();
+    const { replyText } = body;
+
+    if (
+      typeof replyText !== "string" ||
+      replyText.trim().length < 1 ||
+      replyText.trim().length > 500
+    ) {
+      return NextResponse.json(
+        { error: "Reply must be between 1 and 500 characters." },
+        { status: 400 }
+      );
+    }
+
+    const supabase = await createServerSupabaseClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { data: review } = await supabase
+      .from("reviews")
+      .select("*, businesses!inner(id, user_id, gbp_access_token, gbp_refresh_token, gbp_token_expiry, gbp_location_name)")
+      .eq("id", id)
+      .single();
+
+    if (!review) return NextResponse.json({ error: "Review not found" }, { status: 404 });
+
+    const business = review.businesses as {
+      id: string;
+      user_id: string;
+      gbp_access_token: string | null;
+      gbp_refresh_token: string | null;
+      gbp_token_expiry: string | null;
+      gbp_location_name: string | null;
+    };
+
+    if (business.user_id !== user.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Refresh token if needed
+    let accessToken = business.gbp_access_token;
+    if (business.gbp_refresh_token) {
+      const expiryDate = new Date(business.gbp_token_expiry || 0);
+      if (expiryDate.getTime() - Date.now() < 5 * 60 * 1000) {
+        try {
+          const refreshed = await refreshAccessToken(business.gbp_refresh_token);
+          accessToken = refreshed.access_token;
+          await supabase
+            .from("businesses")
+            .update({
+              gbp_access_token: refreshed.access_token,
+              gbp_token_expiry: new Date(refreshed.expiry_date).toISOString(),
+            })
+            .eq("id", business.id);
+        } catch {
+          console.error("Token refresh failed");
+        }
+      }
+    }
+
+    if (accessToken && business.gbp_location_name) {
+      try {
+        const reviewName = `${business.gbp_location_name}/reviews/${review.google_review_id}`;
+        await postReply(accessToken, reviewName, replyText.trim());
+      } catch (err) {
+        console.error("GBP postReply failed:", err);
+        return NextResponse.json(
+          { error: "Failed to post to Google. Check your GBP connection." },
+          { status: 502 }
+        );
+      }
     }
 
     await supabase
       .from("reviews")
       .update({
         status: "posted",
-        final_reply: replyText,
+        final_reply: replyText.trim(),
         posted_at: new Date().toISOString(),
       })
       .eq("id", id);
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("post route error:", err);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }
