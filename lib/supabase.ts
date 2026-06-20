@@ -1,27 +1,17 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
-// ws is only needed in Node.js < 22 (no native WebSocket)
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ws = typeof WebSocket === "undefined" ? require("ws") : undefined;
-
-function clientOptions() {
-  return ws ? { realtime: { transport: ws } } : {};
-}
-
-// Client-side client (uses anon key)
+// Client-side (browser)
 export function createClient() {
-  return createSupabaseClient(
+  return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    clientOptions()
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 }
 
-// Server-side client (uses service role — bypasses RLS)
+// Service role (bypasses RLS — for cron, server actions)
 export function createServiceClient() {
-  return createSupabaseClient(
+  return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    clientOptions()
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 }

@@ -24,7 +24,7 @@ export async function GET(): Promise<NextResponse> {
 
     if (isNotFound) {
       return NextResponse.json(
-        { error: "Not authenticated. Visit /api/auth/google first." },
+        { error: "Not authenticated. Visit /api/gbp/connect first." },
         { status: 401 }
       );
     }
