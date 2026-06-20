@@ -49,6 +49,22 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    // Check trial
+    const { data: userData } = await supabase
+      .from("users")
+      .select("trial_ends_at, plan")
+      .eq("id", user.id)
+      .single();
+
+    if (userData?.plan === "trial" && userData.trial_ends_at) {
+      if (new Date(userData.trial_ends_at) < new Date()) {
+        return NextResponse.json(
+          { error: "Trial expired. Please upgrade.", code: "TRIAL_EXPIRED" },
+          { status: 403 }
+        );
+      }
+    }
+
     // Refresh token if needed
     let accessToken = business.gbp_access_token;
     if (business.gbp_refresh_token) {

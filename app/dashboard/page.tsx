@@ -1,15 +1,13 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import DashboardClient from "./DashboardClient";
+import TrialBanner from "@/components/TrialBanner";
 import type { Business, Review } from "@/lib/types";
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase
@@ -27,9 +25,12 @@ export default async function DashboardPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <DashboardClient
-      reviews={(reviews || []) as Review[]}
-      business={business as Business}
-    />
+    <>
+      <TrialBanner />
+      <DashboardClient
+        reviews={(reviews || []) as Review[]}
+        business={business as Business}
+      />
+    </>
   );
 }

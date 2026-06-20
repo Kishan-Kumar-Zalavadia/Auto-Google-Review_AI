@@ -40,6 +40,7 @@ export default function DashboardClient({ reviews: initialReviews, business }: P
   const [editReview, setEditReview] = useState<Review | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [checking, setChecking] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const showToast = useCallback((message: string, type: "success" | "error") => {
     setToast({ message, type });
@@ -83,6 +84,12 @@ export default function DashboardClient({ reviews: initialReviews, business }: P
     });
     try {
       const res = await fetch(`/api/reviews/${id}/approve`, { method: "POST" });
+      const data = await res.json();
+      if (data.code === "TRIAL_EXPIRED") {
+        updateReview(id, { status: "pending", posted_at: undefined, final_reply: undefined });
+        setShowUpgradeModal(true);
+        return;
+      }
       if (!res.ok) throw new Error("Failed");
       showToast("Reply posted successfully!", "success");
     } catch {
@@ -96,6 +103,12 @@ export default function DashboardClient({ reviews: initialReviews, business }: P
     updateReview(id, { status: "skipped" });
     try {
       const res = await fetch(`/api/reviews/${id}/skip`, { method: "POST" });
+      const data = await res.json();
+      if (data.code === "TRIAL_EXPIRED") {
+        updateReview(id, { status: "pending" });
+        setShowUpgradeModal(true);
+        return;
+      }
       if (!res.ok) throw new Error("Failed");
     } catch {
       updateReview(id, { status: "pending" });
@@ -226,6 +239,33 @@ export default function DashboardClient({ reviews: initialReviews, business }: P
             onEdit={setEditReview}
           />
         ))
+      )}
+
+      {/* Upgrade modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 text-center shadow-xl">
+            <div className="text-4xl mb-3">⏰</div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Trial expired</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Your free trial has ended. Upgrade to keep posting replies.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-600 text-sm rounded-xl hover:bg-gray-50"
+              >
+                Not now
+              </button>
+              <a
+                href="/billing"
+                className="flex-1 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 text-center"
+              >
+                Upgrade now
+              </a>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Edit modal */}
