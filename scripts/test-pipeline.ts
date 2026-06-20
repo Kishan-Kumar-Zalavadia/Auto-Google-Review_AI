@@ -4,6 +4,7 @@
 //        name: "Spice Garden Restaurant", type: "restaurant", city: "Bangalore",
 //        tone: "friendly", reply_language: "english", notification_email: "your@email.com"
 //   3. Copy the generated business UUID → paste it as TEST_BUSINESS_ID below
+// Run npm run dev in another terminal before running this script
 
 import dotenv from "dotenv";
 import path from "path";
@@ -151,7 +152,26 @@ async function main() {
   );
   console.log(hindiReply === null ? "  → SKIPPED (offensive review)" : `  → ${hindiReply}`);
 
+  // Test cron endpoint
+  await testCronEndpoint();
+
   console.log("\n✅ Pipeline test complete.\n");
+}
+
+async function testCronEndpoint() {
+  console.log("\n── Cron Endpoint Test ────────────────────────");
+  const url = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/cron/fetch-reviews`;
+  try {
+    const res = await fetch(url, {
+      headers: { "x-cron-secret": process.env.CRON_SECRET || "" },
+    });
+    const json = await res.json();
+    console.log(`  Status: ${res.status}`);
+    console.log(`  Response: ${JSON.stringify(json, null, 2)}`);
+  } catch (err) {
+    console.error(`  ❌ Cron endpoint error: ${err}`);
+    console.error(`  Make sure dev server is running: npm run dev`);
+  }
 }
 
 main().catch((err) => {
